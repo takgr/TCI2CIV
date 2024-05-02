@@ -5,16 +5,16 @@ import re
 import websocket
 import threading
 
-host = "localhost"
-port = 40001
-sport = "COM4"
+host = "192.168.3.155"
+port = 50001
+sport = "/dev/ttyUSB0"
 ser = serial.Serial(sport, 4800)
 #i = 707400
 civ = "34" #hardcoded
 debug = 1
 freq = ''
 f = 10000000
-
+enable_multithread=True
 data = ''
                            
 def on_error(ws, error):
@@ -31,10 +31,13 @@ def on_message(ws, message):
         return f
 
 def on_close(ws, close_status_code, close_reason):
-    print("### closed ###")
+    print ("Connection closed: %s" % time.ctime())
+    time.sleep(10)
+    connect_websocket() # retry per 10 seconds
 
-if __name__ == "__main__":
+def connect_websocket():
     #websocket.enableTrace(True)
+    global ws
     ws = websocket.WebSocketApp("ws://" + host + ":" + str(port),
                                 on_message = on_message,
                                 on_error = on_error,
@@ -43,10 +46,13 @@ if __name__ == "__main__":
     wst.daemon = True
     wst.start()
 
-    conn_timeout = 5
-    while not ws.sock.connected and conn_timeout:
-        time.sleep(1)
-        conn_timeout -= 1
+if __name__ == "__main__":
+    try:
+        connect_websocket()
+        time.sleep(10)
+    except Exception as err:
+        print(err)
+        print("connect failed")
 
 #    ws.on_open = on_open
 
@@ -71,8 +77,14 @@ while 1:
     r = (s.hex()).strip()
     y = y + r
     if y[-12:] == "fefe34e003fd":
-        ws.send("vfo:0,0;")
-        time.sleep(0.2)
+        try:
+            ws.send("vfo:0,0;")
+        except:    
+            print("Did not get frequency, retrying...")
+            #connect_websocket()
+            f = 28000000
+            pass
+#        time.sleep(0.2)
         if debug : print("Got echo from AMP, sending freq : " + str(f))
         time.sleep(0.1)
         icom_set_frequency(f)
